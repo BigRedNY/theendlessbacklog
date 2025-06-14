@@ -1,0 +1,822 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>The Endless Backlog</title>
+    <!-- Chosen Palette: Calm Harmony (Warm Neutrals with Muted Blue/Green Accents) -->
+    <!-- Application Structure Plan: Single-page dashboard layout. Header with title. Section 1: Overview Stats (Total Games, Completed, Percentage, Total Hours), dynamically updated. Section 2: Interactive Game List with thumbnails, titles, times, checkboxes, and removal buttons. Section 3: Filter and Sort controls for the game list. Section 4: Completed Games list. Section 5: Add New Game input. Section 6: Visualizations (Stacked bar chart of game completion time distribution). User Flow: View overview, add/remove/check games (updates stats & localStorage), filter/sort list, view game details/edit in modal, view chart for time insights. Justification: Provides comprehensive summary, detailed interaction, and visual analysis, making the game list feel like a dynamic, explorable report. -->
+    <!-- Visualization & Content Choices: 
+        - Game List (Data): Interactive HTML list with emoji icons, titles, times, checkboxes, and removal buttons (HTML/Tailwind/JS). Interaction: Check/uncheck updates localStorage and overview stats; removal deletes from list; click opens detail modal. Justification: Core data presentation, user-friendly, direct manipulation.
+        - Completion Times (Data) -> Goal: Inform/Compare -> Viz: Stacked Bar chart (Chart.js/Canvas) of games grouped by completion time buckets (total vs. completed). Interaction: Tooltips. Justification: Visual summary of time commitments and progress within those commitments.
+        - Completion Status & Hours (Data) -> Goal: Inform -> Viz: Dynamic text stats (JS update). Interaction: Updates on checkbox change, game addition/removal. Justification: Quick, at-a-glance progress summary.
+        - Game Details (Qualitative/Quantitative) -> Goal: Explore/Edit -> Viz: Modal with editable text fields (HTML/Tailwind/JS). Interaction: Open on click, save on button. Justification: Allows users to add personal context and data to each game.
+        - Filtering/Sorting (Navigation) -> Goal: Organize/Explore -> Viz: Buttons/Input (HTML/Tailwind/JS). Interaction: Filters/sorts displayed lists. Justification: Improves navigability and data exploration for large lists.
+    -->
+    <!-- CONFIRMATION: NO SVG graphics used. NO Mermaid JS used. -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f3f4f6;
+            background-image: url('https://png.pngtree.com/background/20250316/original/pngtree-fun-cartoon-style-game-environment-picture-image_16334295.jpg');
+            background-size: cover;
+            background-position: center;
+            background-attachment: fixed;
+        }
+        .content-overlay {
+            background-color: rgba(255, 255, 255, 0.85);
+            border-radius: 0.75rem;
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+            padding: 1.5rem 2rem;
+            margin-top: 2rem;
+            margin-bottom: 2rem;
+        }
+        .completed-game-row {
+            text-decoration: line-through;
+            color: #6b7280;
+            background-color: #e5e7eb;
+        }
+        .game-icon {
+            width: 40px;
+            height: 40px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.5rem;
+            border-radius: 0.375rem;
+            margin-right: 0.75rem;
+            flex-shrink: 0;
+            background-color: #d1d5db;
+        }
+        .chart-container {
+            position: relative;
+            width: 100%;
+            max-width: 600px;
+            margin-left: auto;
+            margin-right: auto;
+            height: 300px;
+            max-height: 400px;
+        }
+        .modal {
+            position: fixed;
+            z-index: 50;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            overflow: auto;
+            background-color: rgba(0,0,0,0.4);
+            display: none; /* Changed from flex to none for default hidden state */
+            align-items: center;
+            justify-content: center;
+        }
+        .modal-content {
+            background-color: #fff;
+            margin: auto;
+            padding: 20px;
+            border-radius: 8px;
+            width: 90%;
+            max-width: 500px;
+            text-align: left;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        }
+        .sort-button-icon {
+            margin-left: 0.5rem;
+            font-size: 0.75rem;
+        }
+    </style>
+</head>
+<body class="min-h-screen flex flex-col items-center p-4">
+
+    <div class="container mx-auto max-w-4xl content-overlay">
+        <header class="mb-8">
+            <h1 class="text-4xl font-bold text-center text-slate-800">The Endless Backlog</h1>
+        </header>
+
+        <section id="overview-stats" class="mb-8 p-6 bg-slate-50 rounded-lg shadow">
+            <h2 class="text-2xl font-semibold text-slate-700 mb-4">Overview</h2>
+            <p class="text-slate-600 text-lg">This section provides a quick summary of your game completion progress.</p>
+            <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mt-4">
+                <div class="bg-sky-100 p-4 rounded-lg text-center">
+                    <p class="text-3xl font-bold text-sky-700" id="total-games">0</p>
+                    <p class="text-sm text-sky-600">Total Games</p>
+                </div>
+                <div class="bg-emerald-100 p-4 rounded-lg text-center">
+                    <p class="text-3xl font-bold text-emerald-700" id="games-completed">0</p>
+                    <p class="text-sm text-emerald-600">Games Completed</p>
+                </div>
+                <div class="bg-amber-100 p-4 rounded-lg text-center">
+                    <p class="text-3xl font-bold text-amber-700" id="completion-percentage">0%</p>
+                    <p class="text-sm text-amber-600">Completion</p>
+                </div>
+                <div class="bg-purple-100 p-4 rounded-lg text-center">
+                    <p class="text-3xl font-bold text-purple-700" id="total-hours-to-play">0h</p>
+                    <p class="text-sm text-purple-600">Hours Remaining</p>
+                </div>
+            </div>
+        </section>
+
+        <section id="game-list-controls" class="mb-6 p-6 bg-slate-50 rounded-lg shadow">
+            <h2 class="text-2xl font-semibold text-slate-700 mb-4">List Controls</h2>
+            <div class="flex flex-col sm:flex-row sm:items-center gap-4">
+                <input type="text" id="search-input" placeholder="Search games..." class="flex-grow p-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
+                <div class="flex space-x-2">
+                    <button id="filter-all-button" class="bg-blue-500 hover:bg-blue-600 text-white font-semibold py-2 px-4 rounded-lg shadow-sm transition duration-300 ease-in-out">All</button>
+                    <button id="filter-to-play-button" class="bg-gray-200 hover:bg-gray-300 text-gray-800 font-semibold py-2 px-4 rounded-lg shadow-sm transition duration-300 ease-in-out">To Play</button>
+                    <button id="filter-completed-button" class="bg-gray-200 hover:bg-gray-300 text-gray-800 font-semibold py-2 px-4 rounded-lg shadow-sm transition duration-300 ease-in-out">Completed</button>
+                </div>
+            </div>
+            <div class="flex space-x-2 mt-4 justify-end">
+                <button id="sort-name-button" class="bg-blue-500 hover:bg-blue-600 text-white font-semibold py-2 px-4 rounded-lg shadow-md transition duration-300 ease-in-out">
+                    Sort by Name <span id="sort-name-icon" class="sort-button-icon"></span>
+                </button>
+                <button id="sort-time-button" class="bg-blue-500 hover:bg-blue-600 text-white font-semibold py-2 px-4 rounded-lg shadow-md transition duration-300 ease-in-out">
+                    Sort by Time <span id="sort-time-icon" class="sort-button-icon"></span>
+                </button>
+            </div>
+        </section>
+
+        <section id="to-play-section" class="mb-8">
+            <h2 class="text-2xl font-semibold text-slate-700 mb-4">Games To Play</h2>
+            <p class="text-slate-600 mb-4">Below is your list of games to play. Mark games as completed to track your progress. Completion times are estimates from HowLongToBeat.</p>
+            <div id="to-play-list-container" class="space-y-3 max-h-[60vh] overflow-y-auto bg-slate-50 p-4 rounded-lg shadow">
+            </div>
+        </section>
+
+        <section id="completed-section" class="mb-8">
+            <h2 class="text-2xl font-semibold text-slate-700 mb-4">Completed Games</h2>
+            <p class="text-slate-600 mb-4">These are the games you've successfully completed!</p>
+            <div id="completed-list-container" class="space-y-3 max-h-[40vh] overflow-y-auto bg-slate-50 p-4 rounded-lg shadow">
+            </div>
+        </section>
+        
+        <section id="add-game-section" class="mb-8 p-6 bg-slate-50 rounded-lg shadow">
+            <h2 class="text-2xl font-semibold text-slate-700 mb-4">Add New Game</h2>
+            <p class="text-slate-600 mb-4">Enter a game title below to add it to your list. The completion time will be automatically fetched.</p>
+            <div class="flex flex-col sm:flex-row gap-4">
+                <input type="text" id="new-game-title" placeholder="Enter game title" class="flex-grow p-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
+                <button id="add-game-button" class="bg-emerald-500 hover:bg-emerald-600 text-white font-semibold py-3 px-6 rounded-lg shadow-md transition duration-300 ease-in-out">Add Game</button>
+            </div>
+            <div id="add-game-message" class="mt-4 text-center text-sm font-medium text-gray-700"></div>
+        </section>
+
+        <section id="visualization-section" class="mb-8">
+            <h2 class="text-2xl font-semibold text-slate-700 mb-4">Completion Time Distribution</h2>
+            <p class="text-slate-600 mb-4">This chart visualizes the distribution of estimated completion times for the games in your list, helping you understand the time investment across your backlog.</p>
+            <div class="chart-container bg-slate-50 p-4 rounded-lg shadow">
+                <canvas id="completionTimeChart"></canvas>
+            </div>
+        </section>
+
+        <footer class="mt-8 text-center">
+            <button id="reset-button" class="bg-red-600 hover:bg-red-700 text-white font-semibold py-2 px-6 rounded-lg shadow-md transition duration-300 ease-in-out focus:outline-none focus:ring-2 focus:ring-red-400 focus:ring-opacity-75">
+                Reset All Progress
+            </button>
+        </footer>
+    </div>
+
+    <!-- Reset Confirmation Modal -->
+    <div id="reset-modal" class="modal">
+        <div class="modal-content">
+            <p class="text-lg font-semibold mb-4">Are you sure you want to reset all completed games? This cannot be undone.</p>
+            <button id="confirm-reset" class="bg-red-500 hover:bg-red-600 text-white font-semibold py-2 px-4 rounded-lg shadow-md mr-4">Yes, Reset</button>
+            <button id="cancel-reset" class="bg-gray-300 hover:bg-gray-400 text-gray-800 font-semibold py-2 px-4 rounded-lg shadow-md">Cancel</button>
+        </div>
+    </div>
+
+    <!-- Game Details Modal -->
+    <div id="game-details-modal" class="modal">
+        <div class="modal-content">
+            <h3 class="text-2xl font-bold text-slate-800 mb-4" id="detail-game-title"></h3>
+            <div class="space-y-3 text-slate-700">
+                <p><span class="font-semibold">Completion Time:</span> <span id="detail-game-time"></span></p>
+                <div>
+                    <label for="detail-game-genre" class="block text-sm font-medium text-gray-700">Genre:</label>
+                    <input type="text" id="detail-game-genre" class="mt-1 block w-full p-2 border border-gray-300 rounded-md">
+                </div>
+                <div>
+                    <label for="detail-game-platform" class="block text-sm font-medium text-gray-700">Platform:</label>
+                    <input type="text" id="detail-game-platform" class="mt-1 block w-full p-2 border border-gray-300 rounded-md">
+                </div>
+                <div>
+                    <label for="detail-game-description" class="block text-sm font-medium text-gray-700">Description:</label>
+                    <textarea id="detail-game-description" rows="3" class="mt-1 block w-full p-2 border border-gray-300 rounded-md"></textarea>
+                </div>
+                <div>
+                    <label for="detail-game-user-rating" class="block text-sm font-medium text-gray-700">Your Rating (1-10):</label>
+                    <input type="number" id="detail-game-user-rating" min="1" max="10" class="mt-1 block w-full p-2 border border-gray-300 rounded-md">
+                </div>
+            </div>
+            <div class="mt-6 flex justify-end space-x-3">
+                <button id="save-details-button" class="bg-blue-500 hover:bg-blue-600 text-white font-semibold py-2 px-4 rounded-lg shadow-md">Save Details</button>
+                <button id="close-details-button" class="bg-gray-300 hover:bg-gray-400 text-gray-800 font-semibold py-2 px-4 rounded-lg shadow-md">Close</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const initialGames = [
+            { id: 'game-0', title: "1000xRESIST", time: "12h 50m", icon: "✨", completed: false, genre: "", platform: "", description: "", userRating: "" },
+            { id: 'game-1', title: "13 Sentinels", time: "36h 37m", icon: "🤖", completed: false, genre: "", platform: "", description: "", userRating: "" },
+            { id: "game-2", title: "A Little Golf Journey", time: "9h 28m", icon: "⛳", completed: false, genre: "", platform: "", description: "", userRating: "" },
+            { id: "game-3", title: "A Way Out", time: "6h 47m", icon: "⛓️", completed: false, genre: "", platform: "", description: "", userRating: "" },
+            { id: "game-4", title: "Astral Chain", time: "29h 2m", icon: "🔗", completed: false, genre: "", platform: "", description: "", userRating: "" },
+            { id: "game-5", title: "Avowed", time: "47h 50m", icon: "⚔️", completed: false, genre: "", platform: "", description: "", userRating: "" },
+            { id: "game-6", title: "Baldur's Gate Dark Alliance GBA", time: "12h 23m", icon: "🛡️", completed: false, genre: "", platform: "", description: "", userRating: "" },
+            { id: "game-7", title: "Bloodborne", time: "45h 10m", icon: "🩸", completed: false, genre: "", platform: "", description: "", userRating: "" },
+            { id: "game-8", title: "Castlevania Belmonts Revenge", time: "2h 55m", icon: "🦇", completed: false, genre: "", platform: "", description: "", userRating: "" },
+            { id: "game-9", title: "Chrono Trigger", time: "27h 8m", icon: "⏳", completed: false, genre: "", platform: "", description: "", userRating: "" },
+            { id: "game-10", title: "Citizen Sleeper", time: "10h 43m", icon: "🌃", completed: false, genre: "", platform: "", description: "", userRating: "" },
+            { id: "game-11", title: "Cyberpunk 2077", time: "65h 19m", icon: "🔫", completed: false, genre: "", platform: "", description: "", userRating: "" },
+            { id: "game-12", title: "Dark Souls", time: "60h 34m", icon: "🔥", completed: false, genre: "", platform: "", description: "", userRating: "" },
+            { id: "game-13", title: "Dark Souls 2", time: "63h 26m", icon: "🔥", completed: false, genre: "", platform: "", description: "", userRating: "" },
+            { id: "game-14", title: "Dark Souls 3", time: "50h 38m", icon: "🔥", completed: false, genre: "", platform: "", description: "", userRating: "" },
+            { id: "game-15", title: "Dark Souls Remastered", time: "45h 35m", icon: "🔥", completed: false, genre: "", platform: "", description: "", userRating: "" },
+            { id: "game-16", title: "Dave the Diver", time: "34h 13m", icon: "🐠", completed: false, genre: "", platform: "", description: "", userRating: "" },
+            { id: "game-17", title: "Demons Souls", time: "33h 7m", icon: "💀", completed: false, genre: "", platform: "", description: "", userRating: "" },
+            { id: "game-18", title: "Devil May Cry 5", time: "18h 33m", icon: "😈", completed: false, genre: "", platform: "", description: "", userRating: "" },
+            { id: "game-19", title: "Donkey Kong Bananza", time: "N/A (No data yet)", icon: "🍌", completed: false, genre: "", platform: "", description: "", userRating: "" },
+            { id: "game-20", title: "Doom Eternal", time: "21h 29m", icon: "👹", completed: false, genre: "", platform: "", description: "", userRating: "" },
+            { id: "game-21", title: "Doom The Dark Ages", time: "16h 28m", icon: "🛡️", completed: false, genre: "", platform: "", description: "", userRating: "" },
+            { id: "game-22", title: "Dragon Quest 1", time: "10h 21m", icon: "🐉", completed: false, genre: "", platform: "", description: "", userRating: "" },
+            { id: "game-23", title: "Dragon Quest 2", time: "18h 17m", icon: "🐉", completed: false, genre: "", platform: "", description: "", userRating: "" },
+            { id: "game-24", title: "Dragon Quest 3", time: "44h 28m", icon: "🐉", completed: false, genre: "", platform: "", description: "", userRating: "" },
+            { id: "game-25", title: "Dragon Quest 5", time: "39h 37m", icon: "🐉", completed: false, genre: "", platform: "", description: "", userRating: "" },
+            { id: "game-26", title: "Dragon Quest 8", time: "78h 56m", icon: "🐉", completed: false, genre: "", platform: "", description: "", userRating: "" },
+            { id: "game-27", title: "DUSK", time: "9h 49m", icon: "🏚️", completed: false, genre: "", platform: "", description: "", userRating: "" },
+            { id: "game-28", title: "Elden Ring", time: "103h 43m", icon: "💍", completed: false, genre: "", platform: "", description: "", userRating: "" },
+            { id: "game-29", title: "Eternights", time: "13h 20m", icon: "❤️‍🔥", completed: false, genre: "", platform: "", description: "", userRating: "" },
+            { id: "game-30", title: "Fallout 3", time: "54h 47m", icon: "☢️", completed: false, genre: "", platform: "", description: "", userRating: "" },
+            { id: "game-31", title: "Fallout 4", time: "89h 12m", icon: "☢️", completed: false, genre: "", platform: "", description: "", userRating: "" },
+            { id: "game-32", title: "Fallout New Vegas", time: "62h 50m", icon: "🎲", completed: false, genre: "", platform: "", description: "", userRating: "" },
+            { id: "game-33", title: "FF7 Rebirth", time: "70-75h (approx.)", icon: "☁️", completed: false, genre: "", platform: "", description: "", userRating: "" },
+            { id: "game-34", title: "FF7 Remake", time: "42h 4m", icon: "🗡️", completed: false, genre: "", platform: "", description: "", userRating: "" },
+            { id: "game-35", title: "Final Fantasy 1 Pixel Remaster", time: "19h 43m", icon: "💎", completed: false, genre: "", platform: "", description: "", userRating: "" },
+            { id: "game-36", title: "Final Fantasy 2 Pixel Remaster", time: "26h 26m", icon: "⚔️", completed: false, genre: "", platform: "", description: "", userRating: "" },
+            { id: "game-37", title: "Final Fantasy 3 Pixel Remaster", time: "20h 9m", icon: "🔮", completed: false, genre: "", platform: "", description: "", userRating: "" },
+            { id: "game-38", title: "Final Fantasy 4 Pixel Remaster", time: "24h 33m", icon: "🌕", completed: false, genre: "", platform: "", description: "", userRating: "" },
+            { id: "game-39", title: "Final Fantasy 5 Pixel Remaster", time: "36h 59m", icon: "🌍", completed: false, genre: "", platform: "", description: "", userRating: "" },
+            { id: "game-40", title: "Final Fantasy 6 Pixel Remaster", time: "41h 27m", icon: "🚂", completed: false, genre: "", platform: "", description: "", userRating: "" },
+            { id: "game-41", title: "Final Fantasy Mystic Quest", time: "14h 13m", icon: "🗺️", completed: false, genre: "", platform: "", description: "", userRating: "" },
+            { id: "game-42", title: "Firewatch", time: "4h 51m", icon: "🌲", completed: false, genre: "", platform: "", description: "", userRating: "" },
+            { id: "game-43", title: "Forgive Me Father", time: "9h 38m", icon: "✝️", completed: false, genre: "", platform: "", description: "", userRating: "" },
+            { id: "game-44", title: "Ghost of Tsushima", time: "47h 6m", icon: "🌸", completed: false, genre: "", platform: "", description: "", userRating: "" },
+            { id: "game-45", title: "Ghost Trick", time: "12h 44m", icon: "👻", completed: false, genre: "", platform: "", description: "", userRating: "" },
+            { id: "game-46", title: "God of War 2018", time: "33h 44m", icon: "🪓", completed: false, genre: "", platform: "", description: "", userRating: "" },
+            { id: "game-47", title: "God of War Ragnarok", time: "40h 31m", icon: "❄️", completed: false, genre: "", platform: "", description: "", userRating: "" },
+            { id: "game-48", title: "God of War: Chains of Olympus", time: "6h 9m", icon: "⚡", completed: false, genre: "", platform: "", description: "", userRating: "" },
+            { id: "game-49", title: "God of War: Ghost of Sparta", time: "7h 5m", icon: "🗡️", completed: false, genre: "", platform: "", description: "", userRating: "" },
+            { id: "game-50", title: "Grandia", time: "56h 4m", icon: "🧭", completed: false, genre: "", platform: "", description: "", userRating: "" },
+            { id: "game-51", title: "Gris", time: "4h 15m", icon: "🦋", completed: false, genre: "", platform: "", description: "", userRating: "" },
+            { id: "game-52", title: "GTA Vice City Stories", time: "25h 8m", icon: "🌴", completed: false, genre: "", platform: "", description: "", userRating: "" },
+            { id: "game-53", title: "Guardians of the Galaxy", time: "20h 42m", icon: "🚀", completed: false, genre: "", platform: "", description: "", userRating: "" },
+            { id: "game-54", title: "Hyrule Warriors", time: "48h 10m", icon: "⚔️", completed: false, genre: "", platform: "", description: "", userRating: "" },
+            { id: "game-55", title: "Illusion of Gaia", time: "14h 30m", icon: "🌎", completed: false, genre: "", platform: "", description: "", userRating: "" },
+            { id: "game-56", title: "Inscryption", time: "16h 3m", icon: "🃏", completed: false, genre: "", platform: "", description: "", userRating: "" },
+            { id: "game-57", title: "Jackie Chan Stuntmaster", time: "7h 42m", icon: "🥋", completed: false, genre: "", platform: "", description: "", userRating: "" },
+            { id: "game-58", title: "Jusant", time: "5h 52m", icon: "🧗", completed: false, genre: "", platform: "", description: "", userRating: "" },
+            { id: "game-59", title: "Kena Bridge of Spirits", time: "14h 44m", icon: "🦊", completed: false, genre: "", platform: "", description: "", userRating: "" },
+            { id: "game-60", title: "Legend of Zelda Oracle of Ages", time: "19h 33m", icon: "⏳", completed: false, genre: "", platform: "", description: "", userRating: "" },
+            { id: "game-61", title: "Legend of Zelda Oracle of Seasons", time: "18h", icon: "🍂", completed: false, genre: "", platform: "", description: "", userRating: "" },
+            { id: "game-62", title: "Like a Dragon: Infinite Wealth", time: "85h 24m", icon: "🏖️", completed: false, genre: "", platform: "", description: "", userRating: "" },
+            { id: "game-63", title: "Live a Live", time: "26h 52m", icon: "🕰️", completed: false, genre: "", platform: "", description: "", userRating: "" },
+            { id: "game-64", title: "Luigi's Mansion 2", time: "17h 56m", icon: "🔦", completed: false, genre: "", platform: "", description: "", userRating: "" },
+            { id: "game-65", title: "Luigi's Mansion 3", time: "17h 19m", icon: "👻", completed: false, genre: "", platform: "", description: "", userRating: "" },
+            { id: "game-66", title: "Lunar 2: Eternal Blue Complete", time: "41h 42m", icon: "🌙", completed: false, genre: "", platform: "", description: "", userRating: "" },
+            { id: "game-67", title: "Lunar: Silver Star Story Complete", time: "31h 34m", icon: "🌟", completed: false, genre: "", platform: "", description: "", userRating: "" },
+            { id: "game-68", title: "Mass Effect", time: "28h 25m", icon: "🚀", completed: false, genre: "", platform: "", description: "", userRating: "" },
+            { id: "game-69", title: "Metaphor Refantazio", time: "87h 49m", icon: "🎭", completed: false, genre: "", platform: "", description: "", userRating: "" },
+            { id: "game-70", title: "Metroid Dread", time: "12h", icon: "👾", completed: false, genre: "", platform: "", description: "", userRating: "" },
+            { id: "game-71", title: "Metroid Prime", time: "16h 9m", icon: "🔫", completed: false, genre: "", platform: "", description: "", userRating: "" },
+            { id: "game-72", title: "Middle-Earth: Shadow of Mordor", time: "24h 52m", icon: "👁️", completed: false, genre: "", platform: "", description: "", userRating: "" },
+            { id: "game-73", title: "Mouthwashing", time: "2h 57m", icon: "🦷", completed: false, genre: "", platform: "", description: "", userRating: "" },
+            { id: "game-74", title: "Nier Automata", time: "38h 1m", icon: "🤖", completed: false, genre: "", platform: "", description: "", userRating: "" },
+            { id: "game-75", title: "Ni no Kuni: Wrath of the White Witch", time: "57h 30m", icon: "🪄", completed: false, genre: "", platform: "", description: "", userRating: "" },
+            { id: "game-76", title: "Oblivion", time: "89h 47m", icon: "🚪", completed: false, genre: "", platform: "", description: "", userRating: "" },
+            { id: "game-77", title: "Ori and the Blind Forest", time: "10h 41m", icon: "🌳", completed: false, genre: "", platform: "", description: "", userRating: "" },
+            { id: "game-78", title: "Outer Wilds", time: "23h 8m", icon: "🪐", completed: false, genre: "", platform: "", description: "", userRating: "" },
+            { id: "game-79", title: "Outer Worlds", time: "27h 57m", icon: "👽", completed: false, genre: "", platform: "", description: "", userRating: "" },
+            { id: "game-80", title: "Parasite Eve", time: "12h 35m", icon: "🧬", completed: false, genre: "", platform: "", description: "", userRating: "" },
+            { id: "game-81", title: "Panzer Dragoon Saga", time: "16h 47m", icon: "🐉", completed: false, genre: "", platform: "", description: "", userRating: "" },
+            { id: "game-82", title: "Persona 3 Reloaded", time: "86h 25m", icon: "🌙", completed: false, genre: "", platform: "", description: "", userRating: "" },
+            { id: "game-83", title: "Persona 4 Golden", time: "85h 43m", icon: "📺", completed: false, genre: "", platform: "", description: "", userRating: "" },
+            { id: "game-84", title: "Persona 5 Royal", time: "125h 8m", icon: "🎭", completed: false, genre: "", platform: "", description: "", userRating: "" },
+            { id: "game-85", title: "Phoenix Wright Ace Attorney", time: "22h 48m", icon: "⚖️", completed: false, genre: "", platform: "", description: "", userRating: "" },
+            { id: "game-86", title: "Pokemon Crystal", time: "52h 19m", icon: "💎", completed: false, genre: "", platform: "", description: "", userRating: "" },
+            { id: "game-87", title: "Popful Mail", time: "9h", icon: "🧚", completed: false, genre: "", platform: "", description: "", userRating: "" },
+            { id: "game-88", title: "PowerWashing Simulator", time: "51h 31m", icon: "💦", completed: false, genre: "", platform: "", description: "", userRating: "" },
+            { id: "game-89", title: "Prey", time: "28h 53m", icon: "🌑", completed: false, genre: "", platform: "", description: "", userRating: "" },
+            { id: "game-90", title: "Prince of Persia The Lost Crown", time: "24h 40m", icon: "👑", completed: false, genre: "", platform: "", description: "", userRating: "" },
+            { id: "game-91", title: "Quantum Break", time: "13h 25m", icon: "⏱️", completed: false, genre: "", platform: "", description: "", userRating: "" },
+            { id: "game-92", title: "Resident Evil 1 (Remake)", time: "14h 8m", icon: "🏚️", completed: false, genre: "", platform: "", description: "", userRating: "" },
+            { id: "game-93", title: "Resident Evil 2 (Remake)", time: "16h 3m", icon: "🧟", completed: false, genre: "", platform: "", description: "", userRating: "" },
+            { id: "game-94", title: "Resident Evil 3 (Remake)", time: "8h", icon: "💥", completed: false, genre: "", platform: "", description: "", userRating: "" },
+            { id: "game-95", title: "Resident Evil 4 (Original)", time: "19h 51m", icon: "🔪", completed: false, genre: "", platform: "", description: "", userRating: "" },
+            { id: "game-96", title: "Resident Evil 5", time: "17h 46m", icon: "☀️", completed: false, genre: "", platform: "", description: "", userRating: "" },
+            { id: "game-97", title: "Robotrek", time: "27h 5m", icon: "🤖", completed: false, genre: "", platform: "", description: "", userRating: "" },
+            { id: "game-98", title: "Ryse Son of Rome", time: "8h 42m", icon: "🛡️", completed: false, genre: "", platform: "", description: "", userRating: "" },
+            { id: "game-99", title: "Sayonara Wild Hearts", time: "2h 51m", icon: "💖", completed: false, genre: "", platform: "", description: "", userRating: "" },
+            { id: "game-100", title: "Sekiro: Shadows Die Twice", time: "44h 23m", icon: "🥷", completed: false, genre: "", platform: "", description: "", userRating: "" },
+            { id: "game-101", title: "Sleeping Dogs Definitive", time: "24h 12m", icon: "🇭🇰", completed: false, genre: "", platform: "", description: "", userRating: "" },
+            { id: "game-102", title: "Soul Blazer", time: "11h 14m", icon: "👼", completed: false, genre: "", platform: "", description: "", userRating: "" },
+            { id: "game-103", title: "Split Fiction", time: "14h 17m", icon: "↔️", completed: false, genre: "", platform: "", description: "", userRating: "" },
+            { id: "game-104", title: "Star Wars Republic Commando", time: "9h 52m", icon: "🔫", completed: false, genre: "", platform: "", description: "", userRating: "" },
+            { id: "game-105", title: "Stellar Blade", time: "37h 13m", icon: "🗡️", completed: false, genre: "", platform: "", description: "", userRating: "" },
+            { id: "game-106", title: "Strider", time: "8h 8m", icon: "🗡️", completed: false, genre: "", platform: "", description: "", userRating: "" },
+            { id: "game-107", title: "Super Mario 64", time: "17h 11m", icon: "🍄", completed: false, genre: "", platform: "", description: "", userRating: "" },
+            { id: "game-108", title: "Super Mario Galaxy", time: "21h 42m", icon: "⭐️", completed: false, genre: "", platform: "", description: "", userRating: "" } ,
+            { id: "game-109", title: "Super Mario RPG", time: "14h 31m", icon: "🌟", completed: false, genre: "", platform: "", description: "", userRating: "" },
+            { id: "game-110", title: "Super Mario Sunshine", time: "20h 34m", icon: "☀️", completed: false, genre: "", platform: "", description: "", userRating: "" },
+            { id: "game-111", title: "Tales of Arise", time: "56h 49m", icon: "💥", completed: false, genre: "", platform: "", description: "", userRating: "" },
+            { id: "game-112", title: "Terranigma", time: "19h 31m", icon: "🌍", completed: false, genre: "", platform: "", description: "", userRating: "" },
+            { id: "game-113", title: "To the Moon", time: "4h 33m", icon: "🌕", completed: false, genre: "", platform: "", description: "", userRating: "" },
+            { id: "game-114", title: "Tokyo Xanadu", time: "58h 49m", icon: "🏙️", completed: false, genre: "", platform: "", description: "", userRating: "" },
+            { id: "game-115", title: "Trials of Mana", time: "27h 21m", icon: "🌳", completed: false, genre: "", platform: "", description: "", userRating: "" },
+            { id: "game-116", title: "Uncharted 4", time: "18h 27m", icon: "🧭", completed: false, genre: "", platform: "", description: "", userRating: "" },
+            { id: "game-117", title: "VA-11 Hall-A", time: "13h 48m", icon: "🍹", completed: false, genre: "", platform: "", description: "", userRating: "" },
+            { id: "game-118", title: "Xenoblade Chronicles 1", time: "86h 1m", icon: "⚔️", completed: false, genre: "", platform: "", description: "", userRating: "" },
+            { id: "game-119", title: "Xenoblade Chronicles 2", time: "110h 19m", icon: "🗡️", completed: false, genre: "", platform: "", description: "", userRating: "" },
+            { id: "game-120", title: "Xenoblade Chronicles 3", time: "104h 22m", icon: "♾️", completed: false, genre: "", platform: "", description: "", userRating: "" },
+            { id: "game-121", title: "Xenoblade Chronicles X", time: "112h 14m", icon: "🤖", completed: false, genre: "", platform: "", description: "", userRating: "" },
+            { id: "game-122", title: "Yakuza 3 Remastered", time: "33h 28m", icon: "🐉", completed: false, genre: "", platform: "", description: "", userRating: "" },
+            { id: "game-123", title: "Yakuza 4 Remastered", time: "40h 54m", icon: "🐉", completed: false, genre: "", platform: "", description: "", userRating: "" },
+            { id: "game-124", title: "Yakuza 5 Remastered", time: "67h 3m", icon: "🐉", completed: false, genre: "", platform: "", description: "", userRating: "" },
+            { id: "game-125", title: "Yakuza 6: The Song of Life", time: "32h 59m", icon: "🐉", completed: false, genre: "", platform: "", description: "", userRating: "" },
+            { id: "game-126", title: "Yakuza Kiwami", time: "34h 19m", icon: "🐉", completed: false, genre: "", platform: "", description: "", userRating: "" },
+            { id: "game-127", title: "Yakuza Kiwami 2", time: "37h 56m", icon: "🐉", completed: false, genre: "", platform: "", description: "", userRating: "" },
+            { id: "game-128", title: "Yakuza: Like a Dragon", time: "69h 57m", icon: "🐉", completed: false, genre: "", platform: "", description: "", userRating: "" },
+            { id: "game-129", title: "Ys I & II Complete (DS)", time: "15h 47m", icon: "🗡️", completed: false, genre: "", platform: "", description: "", userRating: "" },
+            { id: "game-130", title: "Ys Memories of Celceta", time: "27h 39m", icon: "🌳", completed: false, genre: "", platform: "", description: "", userRating: "" },
+            { id: "game-131", title: "Ys VIII: Lacrimosa of Dana", time: "51h 2m", icon: "🌊", completed: false, genre: "", platform: "", description: "", userRating: "" }
+        ];
+
+        let gamesData = [];
+        let currentFilter = 'all'; // 'all', 'to-play', 'completed'
+        let currentSearchQuery = '';
+
+        const toPlayListDiv = document.getElementById('to-play-list-container');
+        const completedListDiv = document.getElementById('completed-list-container');
+        const sortNameButton = document.getElementById('sort-name-button');
+        const sortTimeButton = document.getElementById('sort-time-button');
+        const sortNameIcon = document.getElementById('sort-name-icon');
+        const sortTimeIcon = document.getElementById('sort-time-icon');
+        const resetButton = document.getElementById('reset-button');
+        const totalGamesSpan = document.getElementById('total-games');
+        const gamesCompletedSpan = document.getElementById('games-completed');
+        const completionPercentageSpan = document.getElementById('completion-percentage');
+        const totalHoursToPlaySpan = document.getElementById('total-hours-to-play');
+        const completionTimeChartCtx = document.getElementById('completionTimeChart').getContext('2d');
+        let completionTimeChart;
+
+        const newGameTitleInput = document.getElementById('new-game-title');
+        const addGameButton = document.getElementById('add-game-button');
+        const addGameMessageDiv = document.getElementById('add-game-message');
+
+        const searchInput = document.getElementById('search-input');
+        const filterAllButton = document.getElementById('filter-all-button');
+        const filterToPlayButton = document.getElementById('filter-to-play-button');
+        const filterCompletedButton = document.getElementById('filter-completed-button');
+
+        const gameDetailsModal = document.getElementById('game-details-modal');
+        const detailGameTitle = document.getElementById('detail-game-title');
+        const detailGameTime = document.getElementById('detail-game-time');
+        const detailGameGenre = document.getElementById('detail-game-genre');
+        const detailGamePlatform = document.getElementById('detail-game-platform');
+        const detailGameDescription = document.getElementById('detail-game-description');
+        const detailGameUserRating = document.getElementById('detail-game-user-rating');
+        const saveDetailsButton = document.getElementById('save-details-button');
+        const closeDetailsButton = document.getElementById('close-details-button');
+
+        let currentSortBy = 'title';
+        let currentSortDirection = 'asc';
+
+        function parseTimeToHours(timeString) {
+            if (!timeString || typeof timeString !== 'string' || timeString.toLowerCase().includes('n/a')) {
+                return null;
+            }
+            if (timeString.includes('(approx.)')) {
+                const parts = timeString.replace('h (approx.)', '').split('-');
+                if (parts.length === 2) {
+                    return (parseFloat(parts[0]) + parseFloat(parts[1])) / 2;
+                }
+                return parseFloat(parts[0]);
+            }
+            let totalHours = 0;
+            const hourMatch = timeString.match(/(\d+)h/);
+            const minuteMatch = timeString.match(/(\d+)m/);
+            if (hourMatch) totalHours += parseFloat(hourMatch[1]);
+            if (minuteMatch) totalHours += parseFloat(minuteMatch[1]) / 60;
+            return totalHours > 0 ? totalHours : null;
+        }
+
+        function updateSortIcons() {
+            sortNameIcon.textContent = '';
+            sortTimeIcon.textContent = '';
+            if (currentSortBy === 'title') {
+                sortNameIcon.textContent = currentSortDirection === 'asc' ? '▲' : '▼';
+            } else if (currentSortBy === 'time') {
+                sortTimeIcon.textContent = currentSortDirection === 'asc' ? '▲' : '▼';
+            }
+        }
+
+        function sortGames(sortBy) {
+            if (currentSortBy === sortBy) {
+                currentSortDirection = currentSortDirection === 'asc' ? 'desc' : 'asc';
+            } else {
+                currentSortBy = sortBy;
+                currentSortDirection = 'asc';
+            }
+
+            gamesData.sort((a, b) => {
+                if (currentSortBy === 'title') {
+                    const titleA = a.title.toLowerCase();
+                    const titleB = b.title.toLowerCase();
+                    return currentSortDirection === 'asc' ? titleA.localeCompare(titleB) : titleB.localeCompare(titleA);
+                } else if (currentSortBy === 'time') {
+                    const timeA = parseTimeToHours(a.time);
+                    const timeB = parseTimeToHours(b.time);
+
+                    if (timeA === null && timeB === null) return 0;
+                    if (timeA === null) return currentSortDirection === 'asc' ? 1 : -1;
+                    if (timeB === null) return currentSortDirection === 'asc' ? -1 : 1;
+
+                    return currentSortDirection === 'asc' ? timeA - timeB : timeB - timeA;
+                }
+                return 0;
+            });
+            updateSortIcons();
+            saveGamesToLocalStorage();
+            renderGameLists();
+        }
+
+        function updateOverviewStats() {
+            const totalGames = gamesData.length;
+            let completedCount = 0;
+            let totalHoursToPlay = 0;
+
+            gamesData.forEach(game => {
+                if (game.completed) {
+                    completedCount++;
+                } else {
+                    const hours = parseTimeToHours(game.time);
+                    if (hours !== null) {
+                        totalHoursToPlay += hours;
+                    }
+                }
+            });
+            const percentage = totalGames > 0 ? Math.round((completedCount / totalGames) * 100) : 0;
+
+            totalGamesSpan.textContent = totalGames;
+            gamesCompletedSpan.textContent = completedCount;
+            completionPercentageSpan.textContent = `${percentage}%`;
+            totalHoursToPlaySpan.textContent = `${Math.round(totalHoursToPlay)}h`;
+        }
+
+        function updateCompletionTimeChart() {
+            const timeBuckets = {
+                "0-10h": { total: 0, completed: 0 },
+                "10-20h": { total: 0, completed: 0 },
+                "20-40h": { total: 0, completed: 0 },
+                "40-60h": { total: 0, completed: 0 },
+                "60-100h": { total: 0, completed: 0 },
+                "100h+": { total: 0, completed: 0 },
+                "N/A": { total: 0, completed: 0 }
+            };
+
+            gamesData.forEach(game => {
+                const hours = parseTimeToHours(game.time);
+                let bucket = "N/A";
+
+                if (hours !== null) {
+                    if (hours <= 10) bucket = "0-10h";
+                    else if (hours <= 20) bucket = "10-20h";
+                    else if (hours <= 40) bucket = "20-40h";
+                    else if (hours <= 60) bucket = "40-60h";
+                    else if (hours <= 100) bucket = "60-100h";
+                    else bucket = "100h+";
+                }
+                timeBuckets[bucket].total++;
+                if (game.completed) {
+                    timeBuckets[bucket].completed++;
+                }
+            });
+
+            const labels = Object.keys(timeBuckets);
+            const totalData = labels.map(label => timeBuckets[label].total);
+            const completedData = labels.map(label => timeBuckets[label].completed);
+
+            if (completionTimeChart) {
+                completionTimeChart.destroy();
+            }
+
+            completionTimeChart = new Chart(completionTimeChartCtx, {
+                type: 'bar',
+                data: {
+                    labels: labels,
+                    datasets: [
+                        {
+                            label: 'Total Games',
+                            data: totalData,
+                            backgroundColor: 'rgba(54, 162, 235, 0.6)',
+                            borderColor: 'rgba(54, 162, 235, 1)',
+                            borderWidth: 1
+                        },
+                        {
+                            label: 'Completed Games',
+                            data: completedData,
+                            backgroundColor: 'rgba(75, 192, 192, 0.6)',
+                            borderColor: 'rgba(75, 192, 192, 1)',
+                            borderWidth: 1
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        x: {
+                            stacked: true,
+                            title: {
+                                display: true,
+                                text: 'Estimated Completion Time (Main + Extras)'
+                            }
+                        },
+                        y: {
+                            stacked: true,
+                            beginAtZero: true,
+                            title: {
+                                display: true,
+                                text: 'Number of Games'
+                            }
+                        }
+                    },
+                    plugins: {
+                        tooltip: {
+                            callbacks: {
+                                label: function(context) {
+                                    let label = context.dataset.label || '';
+                                    if (label) {
+                                        label += ': ';
+                                    }
+                                    if (context.parsed.y !== null) {
+                                        label += context.parsed.y;
+                                    }
+                                    return label;
+                                }
+                            }
+                        },
+                        legend: {
+                            position: 'top',
+                        }
+                    }
+                }
+            });
+        }
+
+        function renderGameLists() {
+            toPlayListDiv.innerHTML = '';
+            completedListDiv.innerHTML = '';
+
+            const filteredGames = gamesData.filter(game => {
+                const matchesSearch = game.title.toLowerCase().includes(currentSearchQuery.toLowerCase());
+                const matchesFilter = (currentFilter === 'all') ||
+                                      (currentFilter === 'to-play' && !game.completed) ||
+                                      (currentFilter === 'completed' && game.completed);
+                return matchesSearch && matchesFilter;
+            });
+
+            filteredGames.forEach((game) => {
+                const gameItem = document.createElement('div');
+                gameItem.className = `flex items-center p-3 rounded-lg shadow-sm transition duration-200 ease-in-out ${game.completed ? 'completed-game-row' : 'bg-white hover:bg-slate-100'}`;
+                gameItem.innerHTML = `
+                    <div class="game-icon">${game.icon}</div>
+                    <label for="game-checkbox-${game.id}" class="flex items-center flex-grow cursor-pointer">
+                        <input type="checkbox" id="game-checkbox-${game.id}" class="form-checkbox h-5 w-5 text-sky-600 rounded-md border-gray-300 focus:ring-sky-500" ${game.completed ? 'checked' : ''}>
+                        <span class="ml-3 text-md font-medium text-slate-700">${game.title}</span>
+                    </label>
+                    <span class="text-sm text-slate-500 ml-4 flex-shrink-0">${game.time}</span>
+                    ${game.completed && game.completionDate ? `<span class="text-sm text-slate-500 ml-2 flex-shrink-0">(${game.completionDate})</span>` : ''}
+                    <button data-game-id="${game.id}" class="remove-game-button ml-4 text-red-500 hover:text-red-700 font-bold text-lg focus:outline-none">✖</button>
+                `;
+
+                const checkbox = gameItem.querySelector(`#game-checkbox-${game.id}`);
+                checkbox.addEventListener('change', (event) => {
+                    const gameObj = gamesData.find(g => g.id === game.id);
+                    if (gameObj) {
+                        gameObj.completed = event.target.checked;
+                        if (event.target.checked) {
+                            const today = new Date();
+                            const yyyy = today.getFullYear();
+                            const mm = String(today.getMonth() + 1).padStart(2, '0');
+                            const dd = String(today.getDate()).padStart(2, '0');
+                            gameObj.completionDate = `${yyyy}-${mm}-${dd}`;
+                        } else {
+                            delete gameObj.completionDate;
+                        }
+                        saveGamesToLocalStorage();
+                        renderGameLists();
+                    }
+                });
+
+                const removeButton = gameItem.querySelector('.remove-game-button');
+                removeButton.addEventListener('click', (event) => {
+                    const gameIdToRemove = event.target.dataset.gameId;
+                    gamesData = gamesData.filter(g => g.id !== gameIdToRemove);
+                    saveGamesToLocalStorage();
+                    renderGameLists();
+                });
+
+                gameItem.addEventListener('click', (event) => {
+                    // Prevent modal from opening if checkbox or remove button was clicked
+                    if (!event.target.closest('input[type="checkbox"]') && !event.target.closest('.remove-game-button')) {
+                        openGameDetailsModal(game.id);
+                    }
+                });
+
+                if (game.completed) {
+                    completedListDiv.appendChild(gameItem);
+                } else {
+                    toPlayListDiv.appendChild(gameItem);
+                }
+            });
+            updateOverviewStats();
+            updateCompletionTimeChart();
+        }
+
+        function saveGamesToLocalStorage() {
+            localStorage.setItem('gameTrackerList', JSON.stringify(gamesData));
+        }
+
+        function loadGamesFromLocalStorage() {
+            const storedGames = localStorage.getItem('gameTrackerList');
+            if (storedGames) {
+                gamesData = JSON.parse(storedGames);
+                gamesData.forEach(game => {
+                    if (!game.id) game.id = crypto.randomUUID();
+                    if (game.genre === undefined) game.genre = "";
+                    if (game.platform === undefined) game.platform = "";
+                    if (game.description === undefined) game.description = "";
+                    if (game.userRating === undefined) game.userRating = "";
+                });
+            } else {
+                gamesData = initialGames.map(game => ({ ...game, id: crypto.randomUUID() }));
+            }
+        }
+
+        async function fetchCompletionTime(gameTitle) {
+            const prompt = `Search HowLongToBeat.com for "${gameTitle}" and extract the "Main + Extras" completion time. Respond ONLY with the time (e.g., "30h 15m", "N/A (No data yet)", "70-75h (approx.)"). If multiple results, take the most relevant one.`;
+            addGameMessageDiv.textContent = 'Searching HowLongToBeat.com...';
+            addGameMessageDiv.className = 'mt-4 text-center text-sm font-medium text-blue-700';
+
+            try {
+                const apiKey = "";
+                const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`;
+                const payload = { contents: [{ role: "user", parts: [{ text: prompt }] }] };
+
+                const response = await fetch(apiUrl, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+                const result = await response.json();
+
+                if (result.candidates && result.candidates.length > 0 &&
+                    result.candidates[0].content && result.candidates[0].content.parts &&
+                    result.candidates[0].content.parts.length > 0) {
+                    const time = result.candidates[0].content.parts[0].text.trim();
+                    return time;
+                } else {
+                    return "N/A (No data yet)";
+                }
+            } catch (error) {
+                console.error("Error fetching completion time:", error);
+                return "N/A (Error fetching)";
+            }
+        }
+
+        addGameButton.addEventListener('click', async () => {
+            const title = newGameTitleInput.value.trim();
+            if (title) {
+                addGameButton.disabled = true;
+                addGameMessageDiv.textContent = 'Adding game and fetching time...';
+                addGameMessageDiv.className = 'mt-4 text-center text-sm font-medium text-blue-700';
+
+                const fetchedTime = await fetchCompletionTime(title);
+
+                const newGame = {
+                    id: crypto.randomUUID(),
+                    title: title,
+                    time: fetchedTime,
+                    icon: "🎮",
+                    completed: false,
+                    genre: "", platform: "", description: "", userRating: "" // Initialize new fields
+                };
+
+                gamesData.push(newGame);
+                saveGamesToLocalStorage();
+                renderGameLists();
+                newGameTitleInput.value = '';
+                addGameButton.disabled = false;
+                addGameMessageDiv.textContent = `"${title}" added! Time: ${fetchedTime}`;
+                addGameMessageDiv.className = 'mt-4 text-center text-sm font-medium text-green-700';
+            } else {
+                addGameMessageDiv.textContent = 'Please enter a game title.';
+                addGameMessageDiv.className = 'mt-4 text-center text-sm font-medium text-red-700';
+            }
+        });
+
+        sortNameButton.addEventListener('click', () => sortGames('title'));
+        sortTimeButton.addEventListener('click', () => sortGames('time'));
+
+        searchInput.addEventListener('input', (event) => {
+            currentSearchQuery = event.target.value;
+            renderGameLists();
+        });
+
+        filterAllButton.addEventListener('click', () => {
+            currentFilter = 'all';
+            filterAllButton.classList.add('bg-blue-500', 'text-white');
+            filterToPlayButton.classList.remove('bg-blue-500', 'text-white');
+            filterCompletedButton.classList.remove('bg-blue-500', 'text-white');
+            renderGameLists();
+        });
+        filterToPlayButton.addEventListener('click', () => {
+            currentFilter = 'to-play';
+            filterToPlayButton.classList.add('bg-blue-500', 'text-white');
+            filterAllButton.classList.remove('bg-blue-500', 'text-white');
+            filterCompletedButton.classList.remove('bg-blue-500', 'text-white');
+            renderGameLists();
+        });
+        filterCompletedButton.addEventListener('click', () => {
+            currentFilter = 'completed';
+            filterCompletedButton.classList.add('bg-blue-500', 'text-white');
+            filterAllButton.classList.remove('bg-blue-500', 'text-white');
+            filterToPlayButton.classList.remove('bg-blue-500', 'text-white');
+            renderGameLists();
+        });
+
+        let editingGameId = null;
+
+        function openGameDetailsModal(gameId) {
+            editingGameId = gameId;
+            const game = gamesData.find(g => g.id === gameId);
+            if (game) {
+                detailGameTitle.textContent = game.title;
+                detailGameTime.textContent = game.time;
+                detailGameGenre.value = game.genre || '';
+                detailGamePlatform.value = game.platform || '';
+                detailGameDescription.value = game.description || '';
+                detailGameUserRating.value = game.userRating || '';
+                gameDetailsModal.style.display = 'flex';
+            }
+        }
+
+        saveDetailsButton.addEventListener('click', () => {
+            const gameIndex = gamesData.findIndex(g => g.id === editingGameId);
+            if (gameIndex !== -1) {
+                gamesData[gameIndex].genre = detailGameGenre.value.trim();
+                gamesData[gameIndex].platform = detailGamePlatform.value.trim();
+                gamesData[gameIndex].description = detailGameDescription.value.trim();
+                gamesData[gameIndex].userRating = detailGameUserRating.value.trim();
+                saveGamesToLocalStorage();
+                renderGameLists();
+            }
+            gameDetailsModal.style.display = 'none';
+            editingGameId = null;
+        });
+
+        closeDetailsButton.addEventListener('click', () => {
+            gameDetailsModal.style.display = 'none';
+            editingGameId = null;
+        });
+
+        const resetModal = document.getElementById('reset-modal');
+        const confirmResetButton = document.getElementById('confirm-reset');
+        const cancelResetButton = document.getElementById('cancel-reset');
+
+        resetButton.addEventListener('click', () => {
+            resetModal.style.display = 'flex';
+        });
+
+        cancelResetButton.addEventListener('click', () => {
+            resetModal.style.display = 'none';
+        });
+
+        confirmResetButton.addEventListener('click', () => {
+            localStorage.removeItem('gameTrackerList');
+            loadGamesFromLocalStorage();
+            renderGameLists();
+            resetModal.style.display = 'none';
+        });
+
+        document.addEventListener('DOMContentLoaded', () => {
+            loadGamesFromLocalStorage();
+            renderGameLists();
+            updateSortIcons();
+            filterAllButton.classList.add('bg-blue-500', 'text-white');
+        });
+    </script>
+</body>
+</html>
