@@ -666,35 +666,26 @@
         }
 
         async function fetchCompletionTime(gameTitle) {
-            const prompt = `Search HowLongToBeat.com for "${gameTitle}" and extract the "Main + Extras" completion time. Respond ONLY with the time (e.g., "30h 15m", "N/A (No data yet)", "70-75h (approx.)"). If multiple results, take the most relevant one.`;
-            addGameMessageDiv.textContent = 'Searching HowLongToBeat.com...';
-            addGameMessageDiv.className = 'mt-4 text-center text-sm font-medium text-blue-700';
+    addGameMessageDiv.textContent = 'Adding game and fetching time...';
+    addGameMessageDiv.className = 'mt-4 text-center text-sm font-medium text-blue-700';
 
-            try {
-                const apiKey = "";
-                const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`;
-                const payload = { contents: [{ role: "user", parts: [{ text: prompt }] }] };
+    try {
+        // !!! IMPORTANT: Replace 'YOUR_VERCEL_FUNCTION_DOMAIN' with your actual Vercel domain (e.g., 'my-gemini-proxy.vercel.app')
+        const proxyUrl = `https://YOUR_VERCEL_FUNCTION_DOMAIN/api/howlongtobeat?gameTitle=${encodeURIComponent(gameTitle)}`;
 
-                const response = await fetch(apiUrl, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(payload)
-                });
-                const result = await response.json();
+        const response = await fetch(proxyUrl);
+        const data = await response.json();
 
-                if (result.candidates && result.candidates.length > 0 &&
-                    result.candidates[0].content && result.candidates[0].content.parts &&
-                    result.candidates[0].content.parts.length > 0) {
-                    const time = result.candidates[0].content.parts[0].text.trim();
-                    return time;
-                } else {
-                    return "N/A (No data yet)";
-                }
-            } catch (error) {
-                console.error("Error fetching completion time:", error);
-                return "N/A (Error fetching)";
-            }
+        if (data && data.time) {
+            return data.time;
+        } else {
+            return "N/A (No data yet)";
         }
+    } catch (error) {
+        console.error("Error fetching completion time via proxy:", error);
+        return "N/A (Error fetching)";
+    }
+}
 
         addGameButton.addEventListener('click', async () => {
             const title = newGameTitleInput.value.trim();
