@@ -671,7 +671,7 @@
 
     try {
         // !!! IMPORTANT: Replace 'YOUR_VERCEL_FUNCTION_DOMAIN' with your actual Vercel domain (e.g., 'my-gemini-proxy.vercel.app')
-        const proxyUrl = `https://YOUR_VERCEL_FUNCTION_DOMAIN/api/howlongtobeat?gameTitle=${encodeURIComponent(gameTitle)}`;
+        const proxyUrl = `https://endless-backlog-proxy.vercel.app/api/howlongtobeat?gameTitle=${encodeURIComponent(gameTitle)}`;
 
         const response = await fetch(proxyUrl);
         const data = await response.json();
