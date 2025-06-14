@@ -68,7 +68,7 @@
             height: 100%;
             overflow: auto;
             background-color: rgba(0,0,0,0.4);
-            display: none; /* Changed from flex to none for default hidden state */
+            display: none;
             align-items: center;
             justify-content: center;
         }
@@ -225,7 +225,7 @@
             { id: "game-4", title: "Astral Chain", time: "29h 2m", icon: "🔗", completed: false, genre: "", platform: "", description: "", userRating: "" },
             { id: "game-5", title: "Avowed", time: "47h 50m", icon: "⚔️", completed: false, genre: "", platform: "", description: "", userRating: "" },
             { id: "game-6", title: "Baldur's Gate Dark Alliance GBA", time: "12h 23m", icon: "🛡️", completed: false, genre: "", platform: "", description: "", userRating: "" },
-            { id: "game-7", title: "Bloodborne", time: "45h 10m", icon: "🩸", completed: false, genre: "", platform: "", description: "", userRating: "" },
+            { id: "game-7", title: "Bloodborne", time: "45h 10m", icon: "�", completed: false, genre: "", platform: "", description: "", userRating: "" },
             { id: "game-8", title: "Castlevania Belmonts Revenge", time: "2h 55m", icon: "🦇", completed: false, genre: "", platform: "", description: "", userRating: "" },
             { id: "game-9", title: "Chrono Trigger", time: "27h 8m", icon: "⏳", completed: false, genre: "", platform: "", description: "", userRating: "" },
             { id: "game-10", title: "Citizen Sleeper", time: "10h 43m", icon: "🌃", completed: false, genre: "", platform: "", description: "", userRating: "" },
@@ -629,7 +629,6 @@
                 });
 
                 gameItem.addEventListener('click', (event) => {
-                    // Prevent modal from opening if checkbox or remove button was clicked
                     if (!event.target.closest('input[type="checkbox"]') && !event.target.closest('.remove-game-button')) {
                         openGameDetailsModal(game.id);
                     }
@@ -666,26 +665,27 @@
         }
 
         async function fetchCompletionTime(gameTitle) {
-    addGameMessageDiv.textContent = 'Adding game and fetching time...';
-    addGameMessageDiv.className = 'mt-4 text-center text-sm font-medium text-blue-700';
+            // !!! IMPORTANT: Replace 'YOUR_VERCEL_FUNCTION_DOMAIN' with your actual Vercel domain (e.g., 'my-gemini-proxy.vercel.app')
+            // This URL will point to your deployed serverless function.
+            const proxyUrl = `https://endless-backlog-proxy.vercel.app/api/howlongtobeat?gameTitle=${encodeURIComponent(gameTitle)}`;
+            
+            addGameMessageDiv.textContent = 'Searching HowLongToBeat.com via proxy...';
+            addGameMessageDiv.className = 'mt-4 text-center text-sm font-medium text-blue-700';
 
-    try {
-        // !!! IMPORTANT: Replace 'YOUR_VERCEL_FUNCTION_DOMAIN' with your actual Vercel domain (e.g., 'my-gemini-proxy.vercel.app')
-        const proxyUrl = `https://endless-backlog-proxy.vercel.app/api/howlongtobeat?gameTitle=${encodeURIComponent(gameTitle)}`;
+            try {
+                const response = await fetch(proxyUrl);
+                const data = await response.json();
 
-        const response = await fetch(proxyUrl);
-        const data = await response.json();
-
-        if (data && data.time) {
-            return data.time;
-        } else {
-            return "N/A (No data yet)";
+                if (data && data.time) {
+                    return data.time;
+                } else {
+                    return "N/A (No data yet)";
+                }
+            } catch (error) {
+                console.error("Error fetching completion time via proxy:", error);
+                return "N/A (Error fetching)";
+            }
         }
-    } catch (error) {
-        console.error("Error fetching completion time via proxy:", error);
-        return "N/A (Error fetching)";
-    }
-}
 
         addGameButton.addEventListener('click', async () => {
             const title = newGameTitleInput.value.trim();
@@ -700,9 +700,9 @@
                     id: crypto.randomUUID(),
                     title: title,
                     time: fetchedTime,
-                    icon: "🎮",
+                    icon: "🎮", // Default icon for new games
                     completed: false,
-                    genre: "", platform: "", description: "", userRating: "" // Initialize new fields
+                    genre: "", platform: "", description: "", userRating: ""
                 };
 
                 gamesData.push(newGame);
@@ -720,68 +720,6 @@
 
         sortNameButton.addEventListener('click', () => sortGames('title'));
         sortTimeButton.addEventListener('click', () => sortGames('time'));
-
-        searchInput.addEventListener('input', (event) => {
-            currentSearchQuery = event.target.value;
-            renderGameLists();
-        });
-
-        filterAllButton.addEventListener('click', () => {
-            currentFilter = 'all';
-            filterAllButton.classList.add('bg-blue-500', 'text-white');
-            filterToPlayButton.classList.remove('bg-blue-500', 'text-white');
-            filterCompletedButton.classList.remove('bg-blue-500', 'text-white');
-            renderGameLists();
-        });
-        filterToPlayButton.addEventListener('click', () => {
-            currentFilter = 'to-play';
-            filterToPlayButton.classList.add('bg-blue-500', 'text-white');
-            filterAllButton.classList.remove('bg-blue-500', 'text-white');
-            filterCompletedButton.classList.remove('bg-blue-500', 'text-white');
-            renderGameLists();
-        });
-        filterCompletedButton.addEventListener('click', () => {
-            currentFilter = 'completed';
-            filterCompletedButton.classList.add('bg-blue-500', 'text-white');
-            filterAllButton.classList.remove('bg-blue-500', 'text-white');
-            filterToPlayButton.classList.remove('bg-blue-500', 'text-white');
-            renderGameLists();
-        });
-
-        let editingGameId = null;
-
-        function openGameDetailsModal(gameId) {
-            editingGameId = gameId;
-            const game = gamesData.find(g => g.id === gameId);
-            if (game) {
-                detailGameTitle.textContent = game.title;
-                detailGameTime.textContent = game.time;
-                detailGameGenre.value = game.genre || '';
-                detailGamePlatform.value = game.platform || '';
-                detailGameDescription.value = game.description || '';
-                detailGameUserRating.value = game.userRating || '';
-                gameDetailsModal.style.display = 'flex';
-            }
-        }
-
-        saveDetailsButton.addEventListener('click', () => {
-            const gameIndex = gamesData.findIndex(g => g.id === editingGameId);
-            if (gameIndex !== -1) {
-                gamesData[gameIndex].genre = detailGameGenre.value.trim();
-                gamesData[gameIndex].platform = detailGamePlatform.value.trim();
-                gamesData[gameIndex].description = detailGameDescription.value.trim();
-                gamesData[gameIndex].userRating = detailGameUserRating.value.trim();
-                saveGamesToLocalStorage();
-                renderGameLists();
-            }
-            gameDetailsModal.style.display = 'none';
-            editingGameId = null;
-        });
-
-        closeDetailsButton.addEventListener('click', () => {
-            gameDetailsModal.style.display = 'none';
-            editingGameId = null;
-        });
 
         const resetModal = document.getElementById('reset-modal');
         const confirmResetButton = document.getElementById('confirm-reset');
@@ -805,9 +743,8 @@
         document.addEventListener('DOMContentLoaded', () => {
             loadGamesFromLocalStorage();
             renderGameLists();
-            updateSortIcons();
-            filterAllButton.classList.add('bg-blue-500', 'text-white');
         });
     </script>
 </body>
 </html>
+�
